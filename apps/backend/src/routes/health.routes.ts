@@ -1,0 +1,14 @@
+/**
+ * Health routes
+ * GET /health
+ */
+
+import { Router } from "express";
+import { asyncHandler } from "../utils/asyncHandler";
+import { healthCheck } from "../controllers/health.controller";
+
+const router = Router();
+
+router.get("/", asyncHandler(healthCheck));
+
+export default router;

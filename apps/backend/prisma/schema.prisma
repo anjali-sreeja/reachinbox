@@ -1,0 +1,129 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+// ──────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Lifecycle status of a single outbound email
+enum EmailStatus {
+  /// Job created and waiting in BullMQ queue
+  SCHEDULED
+
+  /// Worker has picked up the job and is attempting to send
+  PROCESSING
+
+  /// Email was accepted by the SMTP server
+  SENT
+
+  /// All retry attempts exhausted; see errorMessage for details
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  User  (created/updated via Google OAuth)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  /// Subject identifier returned by Google ("sub" claim)
+  googleId  String   @unique
+  name      String
+  email     String   @unique
+  /// Google profile picture URL
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Relations ────────────────────────────────────────────────
+  senders Sender[]
+  emails  Email[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Sender  (an Ethereal SMTP account owned by a User)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Sender {
+  id           String   @id @default(cuid())
+  userId       String
+  /// Display / From address used in outbound emails
+  email        String   @unique
+  /// SMTP username (Ethereal: same as email address)
+  smtpUser     String
+  /// SMTP password – store encrypted in production; plain for dev/Ethereal
+  smtpPassword String
+  createdAt    DateTime @default(now())
+
+  // ── Relations ────────────────────────────────────────────────
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails Email[]
+
+  @@index([userId])
+  @@map("senders")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Email  (one row per outbound email; mirrors the BullMQ job lifecycle)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Email {
+  id        String   @id @default(cuid())
+  userId    String
+  senderId  String
+
+  // ── Content ──────────────────────────────────────────────────
+  recipient String
+  subject   String
+  body      String   @db.Text
+
+  // ── Scheduling ───────────────────────────────────────────────
+  /// When BullMQ should attempt delivery (absolute timestamp)
+  scheduledAt DateTime
+  /// Populated once the SMTP server accepts the message
+  sentAt      DateTime?
+
+  // ── Status & Reliability ─────────────────────────────────────
+  status       EmailStatus @default(SCHEDULED)
+  /// BullMQ job ID – unique so jobs can be de-duplicated (idempotency)
+  jobId        String?     @unique
+  /// How many delivery attempts have been made
+  attempts     Int         @default(0)
+  /// Last error message from SMTP or worker (null when sent OK)
+  errorMessage String?
+
+  // ── Timestamps ───────────────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Relations ────────────────────────────────────────────────
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender Sender @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  // ── Indexes ──────────────────────────────────────────────────
+  // Single-column indexes for common filters / lookups
+  @@index([userId])
+  @@index([senderId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([recipient])
+  @@index([jobId])
+  // Composite indexes for the most frequent multi-column queries
+  @@index([userId, status])           // "all scheduled emails for user X"
+  @@index([userId, scheduledAt])      // "upcoming emails for user X ordered by time"
+  @@index([senderId, status])         // rate-limit look-ups per sender
+  @@index([senderId, scheduledAt])    // next-send ordering per sender
+  @@map("emails")
+}

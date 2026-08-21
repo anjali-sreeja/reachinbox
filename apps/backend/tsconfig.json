@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    /* ── Language & Environment ── */
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "CommonJS",
+    "moduleResolution": "node",
+
+    /* ── Output ── */
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    /* ── Type Checking (strict) ── */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "exactOptionalPropertyTypes": true,
+
+    /* ── Module resolution helpers ── */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* ── Paths (monorepo shared package) ── */
+    "baseUrl": ".",
+    "paths": {
+      "@reachinbox/shared": ["../../packages/shared/src/index.ts"]
+    },
+
+    /* ── Skip checking node_modules types ── */
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "prisma/seed.ts"]
+}
